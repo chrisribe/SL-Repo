@@ -19,6 +19,13 @@ Set `$sl = '.github/sl-learning/sl-runtime/sl.ps1'` and invoke it with
    saves each complete patch outside the repository and returns its `patchPath`.
    Read patches in focused ranges; use `-Path` for literal repository-relative
    files in large commits. Remove `evidenceDirectory` after review.
+- Store resumable progress at the Git-private path returned by
+   `git rev-parse --git-path sl-history-seeder-checkpoint.json`. After selecting
+   the eligible queue and after every batch, write the pinned revision, scope,
+   eligible/reviewed/deferred/remaining commit IDs, and lesson paths. Resume a
+   matching checkpoint before inventory; replace a stale checkpoint only after
+   reporting its revision mismatch. Delete it only after remaining is zero and
+   final `project` and `validate` pass. Never put the checkpoint in the worktree.
 - Default to all substantive first-parent commits from the last two months, in
   batches of up to three. If fewer than 20 remain after filtering, extend to 20,
   repository start, or one year. Do not widen an explicit range without approval.
@@ -33,10 +40,12 @@ For each batch, inspect focused diffs and one necessary ownership hop. Verify th
 constraint against current code and intervening edits. Keep only non-obvious,
 reusable rules that prevent a specific wrong action; defer unsupported claims.
 
-Search applicable `sl-index.json` files and lesson bodies before capture. Mark a
-finding covered only when equivalent SL guidance is retrievable. Code comments and
-ordinary docs are evidence, not automatic reasons to skip a lesson. Generated
-lessons are outputs, not evidence for later findings in the same run.
+Search applicable `sl-index.json` files and lesson bodies plus repository
+instructions, skills, and agents before capture. Mark a finding covered when
+equivalent applicable guidance is already retrievable from any of those sources;
+cite its owner instead of duplicating it in SL. Code comments and ordinary docs
+are evidence, not automatic reasons to skip a lesson. Generated lessons are
+outputs, not evidence for later findings in the same run.
 
 ## Capture
 

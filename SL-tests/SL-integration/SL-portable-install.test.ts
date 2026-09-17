@@ -128,6 +128,21 @@ describe("SL portable installation", () => {
         await readFile(join(destinationDirectory, destinationName), "utf8"),
       ).toBe(await readFile(resolve("sl.ps1"), "utf8"));
       expect(installation.stdout).toContain("No wrapper was created.");
+      if (process.platform === "win32") {
+        expect(installation.stdout).toContain(
+          "Use 'sl.ps1' on Windows because PowerShell reserves 'sl'",
+        );
+      }
+
+      const help = run("pwsh", [
+        "-NoLogo",
+        "-NoProfile",
+        "-File",
+        join(destinationDirectory, destinationName),
+        "help",
+      ]);
+      expectSuccess(help);
+      expect(help.stdout).toContain(`  ${destinationName} initrepo`);
     } finally {
       if (priorUserPath !== undefined) {
         writeWindowsUserPath(priorUserPath);

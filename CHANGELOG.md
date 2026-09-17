@@ -14,12 +14,16 @@
 - A bundled `sl-history-seeder` skill that backfills evidence-backed lessons
   from Git history through the existing SL capture and review lifecycle. Its
   read-only helper saves complete patches outside the repository, returns small
-  metadata, and supports literal file selection for large commits.
+  metadata, and supports literal file selection for large commits. Git-private
+  checkpoints make interrupted runs resumable, and existing repository agents,
+  skills, and instructions participate in deduplication.
 
 ### Changed
 
 - Establish a greenfield lowercase public contract with no installed-layout
   migration support.
+- Use `sl.ps1` as the Windows command name because PowerShell reserves `sl` for
+  `Set-Location`; Unix platforms continue to use `sl`.
 - Reduce a clean destination installation to exactly 17 files.
 - Generate the installed PowerShell implementation as one bundled module with
   embedded conformance vectors, reducing the runtime from 16 files to four.

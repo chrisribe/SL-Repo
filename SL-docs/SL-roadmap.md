@@ -43,6 +43,10 @@ Implemented handoff:
    `project` and `validate`. Do not create a parallel `.github/memory/` store or
    install a second live-capture instruction block.
 
+Long runs checkpoint their pinned revision, reviewed/deferred/remaining commit
+IDs, and lesson paths under `.git`, outside the worktree. Matching runs resume
+that checkpoint; successful completion removes it after projection and validation.
+
 Implementation boundary: [capture](../SL-src/SL-core/SL-capture.ts) currently
 registers a skeleton, not a supplied lesson body. The skill replaces only that
 body, preserves SL-managed frontmatter, and runs `project` and `validate`. Consider

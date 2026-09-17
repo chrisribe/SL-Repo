@@ -16,7 +16,7 @@
     {
       "path": ".github/skills/sl-history-seeder/SKILL.md",
       "category": "core",
-      "sha256": "d4188e7224cb595dafa616a5030dbdf4b9bdf3bb154b9f8d4036b76555bdeea7"
+      "sha256": "40dff40e995f8de6b35ef67dd8ee1242fc542c2a5a0a3e8bf3192ec3a0ac4502"
     },
     {
       "path": ".github/skills/sl-history-seeder/scripts/Get-HistorySeedEvidence.ps1",
