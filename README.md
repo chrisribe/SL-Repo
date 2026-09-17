@@ -71,6 +71,28 @@ sl.ps1 initrepo . -Automation all
 
 On refresh, omitting `-Automation` preserves the current managed selection.
 
+## First use in a repository
+
+After `initrepo` succeeds:
+
+1. Review the new SL files with `git status` and `git diff`. `initrepo` already
+  ran `doctor`, `project`, and `validate`; `doctor` checks SL health only and
+  does not capture or seed lessons.
+2. To recover lessons from existing Git history, open the repository in a
+  supported coding agent and invoke `/sl-history-seeder`. This is optional for
+  a new repository, but recommended when useful history already exists.
+3. Review the generated raw lessons and normal Git diff. Commit them through
+  the repository's usual review process; seeding does not promote guidance or
+  record verified reuse.
+4. Continue normal development. Installed repository instructions tell the
+  agent to retrieve relevant lessons before work and use `sl-lesson-curator`
+  after a verified, reusable discovery.
+5. Run `<sl-command> validate` after manual SL changes. Run
+  `<sl-command> project` first when indexes or projections need rebuilding.
+
+You do not need to run `doctor` before every task. Use it when installation,
+runtime integrity, or repository setup appears broken.
+
 ## Exact fresh layout
 
 A new repository contains exactly these 17 SL files before lessons, events,
