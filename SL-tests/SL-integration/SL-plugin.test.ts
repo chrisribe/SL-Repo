@@ -390,8 +390,8 @@ describe("SL plugin package", () => {
 
   test("uses the committed local runtime in Azure Pipelines without embedded credentials", async () => {
     const templatePaths = [
-      "SL-templates/SL-repository/.azure-pipelines/sl-learning/SL-validation.yml",
-      "SL-templates/SL-repository/.azure-pipelines/sl-learning/SL-retention.yml",
+      "SL-templates/SL-repository/.azure-pipelines/sl-learning/sl-validation.yml",
+      "SL-templates/SL-repository/.azure-pipelines/sl-learning/sl-retention.yml",
     ];
 
     for (const templatePath of templatePaths) {
