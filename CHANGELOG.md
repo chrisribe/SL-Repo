@@ -11,12 +11,16 @@
 - An integrity-hashed system artifact manifest for the lowercase current
   layout and optional provider-adapter selection.
 - `-Automation none|github|azure|all` selection for `sl initrepo`.
+- A bundled `sl-history-seeder` skill that backfills evidence-backed lessons
+  from Git history through the existing SL capture and review lifecycle. Its
+  read-only helper saves complete patches outside the repository, returns small
+  metadata, and supports literal file selection for large commits.
 
 ### Changed
 
 - Establish a greenfield lowercase public contract with no installed-layout
   migration support.
-- Reduce a clean destination installation to exactly 15 files.
+- Reduce a clean destination installation to exactly 17 files.
 - Generate the installed PowerShell implementation as one bundled module with
   embedded conformance vectors, reducing the runtime from 16 files to four.
 - Install no GitHub Actions or Azure Pipelines adapters by default; omitted

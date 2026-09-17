@@ -14,6 +14,16 @@
       "sha256": "f52cea418ac3733f9b5773af9ce006c9ce2fd6b0a1539eed158e2abb8f631c38"
     },
     {
+      "path": ".github/skills/sl-history-seeder/SKILL.md",
+      "category": "core",
+      "sha256": "d4188e7224cb595dafa616a5030dbdf4b9bdf3bb154b9f8d4036b76555bdeea7"
+    },
+    {
+      "path": ".github/skills/sl-history-seeder/scripts/Get-HistorySeedEvidence.ps1",
+      "category": "core",
+      "sha256": "cc83272cf19c5f1fa4cd3d4c0e6405ba80d81b5643e7c94c558abb8020531d7c"
+    },
+    {
       "path": ".github/skills/sl-learning-audit/SKILL.md",
       "category": "core",
       "sha256": "9906d6227889cf019a248cc51f1a2822b095ff82fb0d210a01d35010f4ba0744"

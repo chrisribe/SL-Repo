@@ -177,7 +177,7 @@ describe("SL installer", () => {
   test("installs bundled skills with lowercase names", async () => {
     const root = await slCreateTestRepository();
     repositories.push(root);
-    const skills = ["sl-learning-audit", "sl-lesson-curator"];
+    const skills = ["sl-history-seeder", "sl-learning-audit", "sl-lesson-curator"];
 
     await slInstall(root, "init", false);
 
@@ -210,6 +210,8 @@ describe("SL installer", () => {
     ).sort(slCompareOrdinal);
     expect(files).toEqual([
       ".github/copilot-instructions.md",
+      ".github/skills/sl-history-seeder/SKILL.md",
+      ".github/skills/sl-history-seeder/scripts/Get-HistorySeedEvidence.ps1",
       ".github/skills/sl-learning-audit/SKILL.md",
       ".github/skills/sl-lesson-curator/SKILL.md",
       ".github/sl-learning/.gitattributes",

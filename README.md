@@ -72,12 +72,14 @@ On refresh, omitting `-Automation` preserves the current managed selection.
 
 ## Exact fresh layout
 
-A new repository contains exactly these 15 SL files before lessons, events,
+A new repository contains exactly these 17 SL files before lessons, events,
 receipts, or projections exist:
 
 ```text
 AGENTS.md
 .github/copilot-instructions.md
+.github/skills/sl-history-seeder/SKILL.md
+.github/skills/sl-history-seeder/scripts/Get-HistorySeedEvidence.ps1
 .github/skills/sl-learning-audit/SKILL.md
 .github/skills/sl-lesson-curator/SKILL.md
 .github/sl-learning/.gitattributes

@@ -29,6 +29,14 @@ const SL_CURRENT_SYSTEM_FILES: Array<{
     category: "core",
   },
   {
+    path: ".github/skills/sl-history-seeder/SKILL.md",
+    category: "core",
+  },
+  {
+    path: ".github/skills/sl-history-seeder/scripts/Get-HistorySeedEvidence.ps1",
+    category: "core",
+  },
+  {
     path: ".github/skills/sl-lesson-curator/SKILL.md",
     category: "core",
   },

@@ -1,4 +1,5 @@
-import { access, readFile, readdir } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { access, readFile, readdir, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { Ajv2020 } from "ajv/dist/2020.js";
@@ -109,7 +110,7 @@ describe("SL plugin package", () => {
         name: "Fabrizio Fishkel",
       },
     });
-    const skills = ["sl-learning-audit", "sl-lesson-curator"];
+    const skills = ["sl-history-seeder", "sl-learning-audit", "sl-lesson-curator"];
     expect(
       (await readdir(resolve("SL-plugin", "skills"))).sort(),
     ).toEqual(skills);
@@ -158,10 +159,14 @@ describe("SL plugin package", () => {
       "SL-schemas/sl-state-catalog.schema.json",
       "SL-schemas/sl-usage-projection.schema.json",
       "SL-schemas/sl-validation-contract.schema.json",
+      "SL-plugin/skills/sl-history-seeder/SKILL.md",
+      "SL-plugin/skills/sl-history-seeder/scripts/Get-HistorySeedEvidence.ps1",
       "SL-plugin/skills/sl-learning-audit/SKILL.md",
       "SL-plugin/skills/sl-lesson-curator/SKILL.md",
       "SL-tests/SL-fixtures/SL-monorepo-fixture.ts",
       "SL-templates/SL-repository/.github/sl-learning/.gitattributes",
+      "SL-templates/SL-repository/.github/skills/sl-history-seeder/SKILL.md",
+      "SL-templates/SL-repository/.github/skills/sl-history-seeder/scripts/Get-HistorySeedEvidence.ps1",
       "SL-templates/SL-repository/.github/skills/sl-learning-audit/SKILL.md",
       "SL-templates/SL-repository/.github/skills/sl-lesson-curator/SKILL.md",
       "SL-templates/SL-repository/.github/workflows/sl-learning-validation.yml",
@@ -192,6 +197,54 @@ describe("SL plugin package", () => {
     expect(sourceInstallExamples).toContain("pwsh .\\sl.ps1 install");
     expect(sourceInstallExamples).toContain("sl initrepo");
   }, SL_PACKAGE_AUDIT_TIMEOUT_MS);
+
+  test("history seeder exports patch evidence outside the repository", async () => {
+    const helper = resolve(
+      "SL-plugin/skills/sl-history-seeder/scripts/Get-HistorySeedEvidence.ps1",
+    );
+    const revision = spawnSync("git", ["rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).stdout.trim();
+    const selectedPath = spawnSync(
+      "git",
+      ["show", "--format=", "--name-only", revision],
+      { encoding: "utf8" },
+    ).stdout.trim().split(/\r?\n/u)[0]!;
+    const result = spawnSync(
+      "pwsh",
+      [
+        "-NoProfile",
+        "-File",
+        helper,
+        "-RepositoryPath",
+        resolve("."),
+        "-Commit",
+        revision,
+        "-Path",
+        selectedPath,
+      ],
+      { encoding: "utf8" },
+    );
+    expect(result.status, result.stderr).toBe(0);
+
+    const evidence = JSON.parse(result.stdout) as {
+      evidenceDirectory: string;
+      commits: Array<{
+        patchPath: string;
+        patch?: string;
+        selectedPaths: string[];
+      }>;
+    };
+    try {
+      expect(evidence.commits).toHaveLength(1);
+      expect(evidence.commits[0]?.selectedPaths).toEqual([selectedPath]);
+      expect(evidence.commits[0]?.patch).toBeUndefined();
+      expect(evidence.commits[0]?.patchPath.startsWith(resolve("."))).toBe(false);
+      await expect(access(evidence.commits[0]!.patchPath)).resolves.toBeUndefined();
+    } finally {
+      await rm(evidence.evidenceDirectory, { recursive: true, force: true });
+    }
+  });
 
   test("compiles every schema and validates canonical clean-install templates", async () => {
     const ajv = new Ajv2020({ allErrors: true, strict: false });

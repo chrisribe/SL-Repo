@@ -106,11 +106,13 @@ Neither provider is required for local operation.
 
 ## Fresh repository inventory
 
-The inactive baseline is exactly 15 files:
+The inactive baseline is exactly 17 files:
 
 ```text
 AGENTS.md
 .github/copilot-instructions.md
+.github/skills/sl-history-seeder/SKILL.md
+.github/skills/sl-history-seeder/scripts/Get-HistorySeedEvidence.ps1
 .github/skills/sl-learning-audit/SKILL.md
 .github/skills/sl-lesson-curator/SKILL.md
 .github/sl-learning/.gitattributes
