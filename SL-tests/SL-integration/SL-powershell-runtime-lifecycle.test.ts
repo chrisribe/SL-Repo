@@ -547,7 +547,7 @@ describe("repository-local PowerShell lifecycle", () => {
         root,
         ".github",
         "sl-learning",
-        ".SL-repository-mutation.lock",
+        ".sl-repository-mutation.lock",
       );
       await mkdir(lockPath);
       await writeFile(
