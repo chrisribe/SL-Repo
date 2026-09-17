@@ -12,7 +12,7 @@
     },
     {
       "path": "sl.runtime.psm1",
-      "sha256": "ea9e896d287040d637312d3681eafd6daaac7ca0c61713dd3841939dfae0ce00"
+      "sha256": "1dcd3065d8dde2e81011a398f32a4085ef3262ae4fb80c3626ff952cde902de6"
     },
     {
       "path": "sl.sh",

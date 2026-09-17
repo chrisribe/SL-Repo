@@ -1064,13 +1064,28 @@ function Invoke-SLWithMutationLock {
     finally {
         $script:SLActiveMutationLockPath = $PreviousActiveLockPath
         $OwnerPath = [IO.Path]::Combine($LockPath, 'SL-owner.json')
-        try {
-            $Owner = ConvertFrom-Json ([IO.File]::ReadAllText($OwnerPath)) -Depth 10
-            if ($Owner.token -ceq $LeaseId) {
+        $Released = $false
+        for ($Attempt = 0; $Attempt -lt 40; $Attempt += 1) {
+            try {
+                if (-not [IO.Directory]::Exists($LockPath)) {
+                    $Released = $true
+                    break
+                }
+                $Owner = ConvertFrom-Json ([IO.File]::ReadAllText($OwnerPath)) -Depth 10
+                if ($Owner.token -cne $LeaseId) {
+                    $Released = $true
+                    break
+                }
                 [IO.Directory]::Delete($LockPath, $true)
+                $Released = $true
+                break
+            }
+            catch {
+                Start-Sleep -Milliseconds 25
             }
         }
-        catch {
+        if (-not $Released) {
+            Throw-SLContractError -Code 'mutation-lock-release' -Message "Failed to release SL repository mutation lock: $RelativeLock"
         }
     }
 }
