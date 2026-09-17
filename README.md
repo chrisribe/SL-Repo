@@ -84,9 +84,11 @@ After `initrepo` succeeds:
 3. Review the generated raw lessons and normal Git diff. Commit them through
   the repository's usual review process; seeding does not promote guidance or
   record verified reuse.
-4. Continue normal development. Installed repository instructions tell the
-  agent to retrieve relevant lessons before work and use `sl-lesson-curator`
-  after a verified, reusable discovery.
+4. Continue normal development with a compatible coding agent. No SL command is
+  required for each task: installed repository instructions ask the agent to
+  retrieve relevant lessons before work and capture verified, reusable
+  discoveries through `sl-lesson-curator`. Review any resulting Git changes as
+  part of the normal development workflow.
 5. Run `<sl-command> validate` after manual SL changes. Run
   `<sl-command> project` first when indexes or projections need rebuilding.
 
