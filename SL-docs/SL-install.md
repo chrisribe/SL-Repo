@@ -39,16 +39,17 @@ runtime, daemon, or service remains installed.
 
 ## Initialize or refresh
 
-Use the current directory:
+On Windows, use `sl.ps1` because PowerShell reserves `sl` as an alias for
+`Set-Location`. Use the current directory:
 
 ```powershell
-sl initrepo
+sl.ps1 initrepo
 ```
 
 Or provide a repository:
 
 ```powershell
-sl initrepo C:\path\to\repository
+sl.ps1 initrepo C:\path\to\repository
 ```
 
 The operation:
@@ -67,7 +68,7 @@ The operation:
 Non-interactive execution must include `-Yes`:
 
 ```powershell
-sl initrepo . -Yes
+sl.ps1 initrepo . -Yes
 ```
 
 ## Offline assets
@@ -79,7 +80,7 @@ Supply a directory containing:
 - `sl-<version>-<platform>-<architecture>.tar.gz`
 
 ```powershell
-sl initrepo . -AssetDirectory C:\reviewed\sl-assets
+sl.ps1 initrepo . -AssetDirectory C:\reviewed\sl-assets
 ```
 
 The same manifest, metadata, size, platform, architecture, commit, and checksum
@@ -90,10 +91,10 @@ verification applies offline.
 Fresh repositories default to no hosted automation:
 
 ```powershell
-sl initrepo . -Automation none
-sl initrepo . -Automation github
-sl initrepo . -Automation azure
-sl initrepo . -Automation all
+sl.ps1 initrepo . -Automation none
+sl.ps1 initrepo . -Automation github
+sl.ps1 initrepo . -Automation azure
+sl.ps1 initrepo . -Automation all
 ```
 
 On refresh, an omitted selection preserves the current managed adapters.

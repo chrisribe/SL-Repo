@@ -1241,7 +1241,7 @@ describe("SL promotion", () => {
     const externalMarker = "EXTERNAL-PARSER-CONTENT-MUST-NOT-LEAK";
     await mkdir(outsideInstructionRoot);
     await writeFile(
-      join(outsideInstructionRoot, `${artifactId}.instructions.md`),
+      join(outsideInstructionRoot, basename(prepared.artifactPath)),
       `---\nid: [${externalMarker}\n---\n`,
       "utf8",
     );
@@ -1881,7 +1881,7 @@ describe("SL promotion", () => {
     const instructionDirectory = join(root, ".github", "instructions");
     await mkdir(instructionDirectory, { recursive: true });
     await writeFile(
-      join(instructionDirectory, "SL-collision.instructions.md"),
+      join(instructionDirectory, "sl-collision.instructions.md"),
       `---\nid: ${source.id}\napplyTo: "**/*"\n---\n\n# Collision\n`,
       "utf8",
     );

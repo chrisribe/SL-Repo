@@ -16,6 +16,7 @@ import {
 import { slInstall } from "../../SL-src/SL-core/SL-installer.js";
 import { slLoadRegistry } from "../../SL-src/SL-core/SL-registry.js";
 import {
+  slArtifactShardName,
   slBuildStateCatalog,
   slScopeCatalogEntry,
   slScopeShardName,
@@ -64,6 +65,16 @@ function repositoryPath(root: string, relativePath: string): string {
 }
 
 describe("SL scope-sharded state", () => {
+  test("artifact shard truncation leaves one hash separator", () => {
+    expect(
+      slArtifactShardName(
+        "SL-20260905-KEEP-CROSS-PLATFORM-BOOTSTRAP-LOGIC-THIN",
+      ),
+    ).toBe(
+      "sl-sl-20260905-keep-cross-platform-bootstrap-logic-9f69f3a16e41",
+    );
+  });
+
   test("normalizes scope shards deterministically across path separators and traversal order", () => {
     expect(
       slScopeShardName({ id: "orders", path: "services\\orders\\" }),
@@ -406,6 +417,11 @@ describe("SL scope-sharded state", () => {
       ),
     ) as SLScopeUsageProjection;
     expect(projectionShard.projections).toHaveLength(2);
+    expect(
+      (await slValidateRepository(root)).filter(
+        (issue) => issue.code === "usage-projection-drift",
+      ),
+    ).toEqual([]);
   });
 
   test("writes concurrent immutable events to independent scope and artifact shards", async () => {

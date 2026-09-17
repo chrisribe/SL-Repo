@@ -196,11 +196,9 @@ function Add-SLUnixProfilePath {
 
     $ProfileDirectory = Split-Path -Parent $ProfilePath
     New-Item -ItemType Directory -Path $ProfileDirectory -Force | Out-Null
-    $ExistingLines = if (Test-Path -LiteralPath $ProfilePath -PathType Leaf) {
-        [System.IO.File]::ReadAllLines($ProfilePath)
-    }
-    else {
-        [string[]]@()
+    [string[]]$ExistingLines = @()
+    if (Test-Path -LiteralPath $ProfilePath -PathType Leaf) {
+        $ExistingLines = [System.IO.File]::ReadAllLines($ProfilePath)
     }
     if ($ProfileLine -cnotin $ExistingLines) {
         $Prefix = if (
@@ -414,7 +412,8 @@ function Invoke-SLRepositoryRuntime {
     )
 
     $RuntimePath = Get-SLRepositoryRuntime -RepositoryRoot $RepositoryRoot
-    $PowerShell = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue
+    $PowerShell = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1
     if (-not $PowerShell) {
         throw "PowerShell 7 is required."
     }
@@ -790,6 +789,9 @@ function Install-SLCommand {
 
     Write-Output "Installed sl $SL_VERSION to '$Destination'."
     Confirm-SLUserPath -Directory $DestinationDirectory
+    if (Test-SLWindows) {
+        Write-Output "Use 'sl.ps1' on Windows because PowerShell reserves 'sl' as an alias for Set-Location."
+    }
     Write-Output "No wrapper was created."
 }
 
@@ -801,7 +803,8 @@ function Update-SLCommand {
 
     $Destination = Get-SLInstallDestination
     if (-not (Test-Path -LiteralPath $Destination -PathType Leaf)) {
-        throw "Installed sl command was not found at '$Destination'. Run 'sl install' first."
+        $InstallCommand = if (Test-SLWindows) { "sl.ps1 install" } else { "sl install" }
+        throw "Installed sl command was not found at '$Destination'. Run '$InstallCommand' first."
     }
     Assert-SLRegularFile `
         -Path $Destination `
@@ -967,19 +970,20 @@ function Initialize-SLRepository {
 }
 
 function Show-SLHelp {
+        $CommandName = if (Test-SLWindows) { "sl.ps1" } else { "sl" }
     @"
 sl - repository-local self-learning bootstrap
 
 Usage:
-  sl install
-  sl self-update [-Release <tag>] [-AssetDirectory <path>]
-  sl initrepo [repo-path] [-Release <tag>] [-Repository <owner/name>]
+    $CommandName install
+    $CommandName self-update [-Release <tag>] [-AssetDirectory <path>]
+    $CommandName initrepo [repo-path] [-Release <tag>] [-Repository <owner/name>]
       [-Automation none|github|azure|all] [-AssetDirectory <path>] [-Yes]
-  sl doctor [repo-path]
-  sl project [repo-path]
-  sl validate [repo-path]
-  sl help
-  sl version
+    $CommandName doctor [repo-path]
+    $CommandName project [repo-path]
+    $CommandName validate [repo-path]
+    $CommandName help
+    $CommandName version
 
 Defaults:
   repo-path   Current directory

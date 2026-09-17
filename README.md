@@ -35,16 +35,17 @@ Node.js runtime, wrapper, daemon, or service.
 
 ## Initialize a repository
 
-From the target repository:
+On Windows, use `sl.ps1` because PowerShell reserves `sl` as an alias for
+`Set-Location`. From the target repository:
 
 ```powershell
-sl initrepo
+sl.ps1 initrepo
 ```
 
-Or provide a path:
+On Linux or macOS, use `sl initrepo`. To provide a path on Windows:
 
 ```powershell
-sl initrepo C:\path\to\repository
+sl.ps1 initrepo C:\path\to\repository
 ```
 
 `initrepo` requires a Git repository, downloads and verifies the matching
@@ -57,15 +58,15 @@ For offline initialization, place the reviewed release manifest, checksums,
 and platform archive in one directory:
 
 ```powershell
-sl initrepo C:\path\to\repository -AssetDirectory C:\reviewed\sl-assets
+sl.ps1 initrepo C:\path\to\repository -AssetDirectory C:\reviewed\sl-assets
 ```
 
 No hosted automation is installed by default. Opt in explicitly:
 
 ```powershell
-sl initrepo . -Automation github
-sl initrepo . -Automation azure
-sl initrepo . -Automation all
+sl.ps1 initrepo . -Automation github
+sl.ps1 initrepo . -Automation azure
+sl.ps1 initrepo . -Automation all
 ```
 
 On refresh, omitting `-Automation` preserves the current managed selection.
@@ -102,17 +103,17 @@ An uppercase or ambiguous partial SL layout is rejected without mutation.
 
 ## Command surface
 
-Machine command:
+Machine command (`sl.ps1` on Windows, `sl` on Linux/macOS):
 
 ```text
-sl install
-sl self-update [-Release <tag>]
-sl initrepo [repo-path] [-Automation none|github|azure|all] [-Yes]
-sl doctor [repo-path]
-sl project [repo-path]
-sl validate [repo-path]
-sl help
-sl version
+<sl-command> install
+<sl-command> self-update [-Release <tag>]
+<sl-command> initrepo [repo-path] [-Automation none|github|azure|all] [-Yes]
+<sl-command> doctor [repo-path]
+<sl-command> project [repo-path]
+<sl-command> validate [repo-path]
+<sl-command> help
+<sl-command> version
 ```
 
 After initialization, `doctor`, `project`, and `validate` invoke the committed

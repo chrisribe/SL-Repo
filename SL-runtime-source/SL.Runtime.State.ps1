@@ -642,7 +642,7 @@ function Get-SLScopeShardName {
 function Get-SLArtifactShardName {
     param([Parameter(Mandatory)][string] $ArtifactId)
 
-    $Slug = ConvertTo-SLSlug -Value $ArtifactId -MaximumLength 48
+    $Slug = (ConvertTo-SLSlug -Value $ArtifactId -MaximumLength 48).TrimEnd('-')
     if (-not $Slug) {
         $Slug = 'artifact'
     }

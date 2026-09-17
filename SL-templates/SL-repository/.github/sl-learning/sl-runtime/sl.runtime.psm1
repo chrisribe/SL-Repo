@@ -1025,36 +1025,58 @@ function Invoke-SLWithMutationLock {
             break
         }
         catch {
-            if ([IO.Directory]::Exists($LockPath)) {
-                $Info = [IO.DirectoryInfo]::new($LockPath)
-                $Expired = ([DateTime]::UtcNow - $Info.LastWriteTimeUtc).TotalMilliseconds -ge $StaleMilliseconds
-                $OwnerPath = [IO.Path]::Combine($LockPath, 'SL-owner.json')
-                $Live = $false
-                try {
-                    $Owner = ConvertFrom-Json ([IO.File]::ReadAllText($OwnerPath)) -Depth 10
-                    if ($Owner.hostname -ceq [Environment]::MachineName) {
-                        try {
-                            $Process = [Diagnostics.Process]::GetProcessById([int] $Owner.pid)
-                            $Live = -not $Process.HasExited
-                        }
-                        catch {
-                            $Live = $false
-                        }
-                    }
-                }
-                catch {
+            try {
+                if ([IO.Directory]::Exists($LockPath)) {
+                    $Info = [IO.DirectoryInfo]::new($LockPath)
+                    $ObservedWriteTimeUtc = $Info.LastWriteTimeUtc
+                    $Expired = ([DateTime]::UtcNow - $ObservedWriteTimeUtc).TotalMilliseconds -ge $StaleMilliseconds
+                    $OwnerPath = [IO.Path]::Combine($LockPath, 'SL-owner.json')
                     $Live = $false
-                }
-                if ($Expired -and -not $Live) {
-                    $StalePath = "$LockPath.SL-stale-$([Guid]::NewGuid().ToString('N'))"
+                    $ObservedOwnerToken = $null
                     try {
-                        [IO.Directory]::Move($LockPath, $StalePath)
-                        [IO.Directory]::Delete($StalePath, $true)
-                        continue
+                        $Owner = ConvertFrom-Json ([IO.File]::ReadAllText($OwnerPath)) -Depth 10
+                        $ObservedOwnerToken = [string] $Owner.token
+                        if ($Owner.hostname -ceq [Environment]::MachineName) {
+                            try {
+                                $Process = [Diagnostics.Process]::GetProcessById([int] $Owner.pid)
+                                $Live = -not $Process.HasExited
+                            }
+                            catch {
+                                $Live = $false
+                            }
+                        }
                     }
                     catch {
+                        $Live = $false
+                    }
+                    if ($Expired -and -not $Live) {
+                        $StalePath = "$LockPath.SL-stale-$([Guid]::NewGuid().ToString('N'))"
+                        try {
+                            $CurrentInfo = [IO.DirectoryInfo]::new($LockPath)
+                            $CurrentOwnerToken = $null
+                            try {
+                                $CurrentOwner = ConvertFrom-Json ([IO.File]::ReadAllText($OwnerPath)) -Depth 10
+                                $CurrentOwnerToken = [string] $CurrentOwner.token
+                            }
+                            catch {
+                            }
+                            if (
+                                $CurrentInfo.LastWriteTimeUtc -ne $ObservedWriteTimeUtc -or
+                                $CurrentOwnerToken -cne $ObservedOwnerToken
+                            ) {
+                                continue
+                            }
+                            [IO.Directory]::Move($LockPath, $StalePath)
+                            [IO.Directory]::Delete($StalePath, $true)
+                            continue
+                        }
+                        catch {
+                        }
                     }
                 }
+            }
+            catch {
+                # The lock may disappear between Exists and metadata reads.
             }
             Start-Sleep -Milliseconds 25
         }
@@ -2528,7 +2550,7 @@ function Get-SLScopeShardName {
 function Get-SLArtifactShardName {
     param([Parameter(Mandatory)][string] $ArtifactId)
 
-    $Slug = ConvertTo-SLSlug -Value $ArtifactId -MaximumLength 48
+    $Slug = (ConvertTo-SLSlug -Value $ArtifactId -MaximumLength 48).TrimEnd('-')
     if (-not $Slug) {
         $Slug = 'artifact'
     }

@@ -5,9 +5,33 @@
     "path": "."
   },
   "currentArtifactVersions": {
-    "SL-20260905-KEEP-CROSS-PLATFORM-BOOTSTRAP-LOGIC-THIN": "sha256:63f256c2b939a9207f6e971ab865ea02c323fdda19882f55ed7d2611b7338945"
+    "SL-20260905-KEEP-CROSS-PLATFORM-BOOTSTRAP-LOGIC-THIN": "sha256:113c5d26a3feff67683abc2abbdbabeb8ee0716f42fea7828690b736f4503de2"
   },
   "projections": [
+    {
+      "artifactId": "SL-20260905-KEEP-CROSS-PLATFORM-BOOTSTRAP-LOGIC-THIN",
+      "artifactVersion": "sha256:113c5d26a3feff67683abc2abbdbabeb8ee0716f42fea7828690b736f4503de2",
+      "artifactContentHash": "113c5d26a3feff67683abc2abbdbabeb8ee0716f42fea7828690b736f4503de2",
+      "retrievalCount": 0,
+      "applicationCount": 0,
+      "applicationRate": null,
+      "outcomeCount": 0,
+      "outcomeSuccessCount": 0,
+      "outcomeFailureCount": 0,
+      "outcomePartialCount": 0,
+      "outcomeUnknownCount": 0,
+      "outcomeSuccessRate": null,
+      "verifiedCount": 0,
+      "resolvedCount": 0,
+      "verifiedSuccessCount": 0,
+      "verifiedFailureCount": 0,
+      "unknownCount": 0,
+      "verifiedSuccessRate": null,
+      "scope": {
+        "id": "SL-SCOPE-ROOT",
+        "path": "."
+      }
+    },
     {
       "scope": {
         "id": "SL-SCOPE-ROOT",

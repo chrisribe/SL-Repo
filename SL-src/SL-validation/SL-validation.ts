@@ -1299,7 +1299,11 @@ export async function slValidateRepository(root: string): Promise<SLValidationIs
       projection,
     );
   }
-  const expectedProjections = [...expectedProjectionMap.values()];
+  const expectedProjections = [...expectedProjectionMap.values()].sort(
+    (left, right) =>
+      slCompareOrdinal(left.artifactId, right.artifactId) ||
+      slCompareOrdinal(left.artifactVersion, right.artifactVersion),
+  );
   for (const entry of catalog.scopes) {
     const key = slScopeKey(entry.scope);
     const indexPath = slResolveInside(root, entry.indexPath);

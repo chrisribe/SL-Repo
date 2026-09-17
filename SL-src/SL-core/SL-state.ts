@@ -77,7 +77,8 @@ export function slScopeShardName(scope: SLScopeDescriptor): string {
 }
 
 export function slArtifactShardName(artifactId: string): string {
-  const slug = slSlugify(artifactId).slice(0, 48) || "artifact";
+  const slug =
+    slSlugify(artifactId).slice(0, 48).replace(/-+$/u, "") || "artifact";
   const hash = createHash("sha256")
     .update(artifactId)
     .digest("hex")

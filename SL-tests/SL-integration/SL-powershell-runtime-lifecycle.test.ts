@@ -586,13 +586,22 @@ describe("repository-local PowerShell lifecycle", () => {
                 "--now",
                 `2026-09-05T10:0${index + 1}:00.000Z`,
               ],
-              { cwd: root, stdio: "ignore" },
+              { cwd: root, stdio: ["ignore", "pipe", "pipe"] },
             );
+            let stderr = "";
+            child.stderr.setEncoding("utf8");
+            child.stderr.on("data", (chunk: string) => {
+              stderr += chunk;
+            });
             child.once("error", rejectPromise);
             child.once("exit", (code) =>
               code === 0
                 ? resolvePromise()
-                : rejectPromise(new Error(`pwsh exited ${String(code)}`)),
+                : rejectPromise(
+                    new Error(
+                      `pwsh exited ${String(code)}: ${stderr.trim()}`,
+                    ),
+                  ),
             );
           }),
       );
