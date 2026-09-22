@@ -30,7 +30,7 @@ function Get-ChangedFiles {
         [string[]]$SelectedPaths = @()
     )
 
-    return @(Invoke-Git (@('--literal-pathspecs', 'diff-tree', '--root', '--no-commit-id', '--name-status', '-r', $Revision, '--') + $SelectedPaths) |
+    return @(Invoke-Git (@('--literal-pathspecs', 'diff-tree', '--root', '--diff-merges=first-parent', '--no-commit-id', '--name-status', '-r', $Revision, '--') + $SelectedPaths) |
         Where-Object { $_ } |
         ForEach-Object {
             $parts = $_ -split "`t"
@@ -89,7 +89,7 @@ if ($PSCmdlet.ParameterSetName -eq 'Window') {
 
         $resolvedRevision = @(Invoke-Git @('rev-parse', "$requestedRevision^{commit}"))[0]
         $metadata = @(Invoke-Git @('show', '-s', '--date=short', '--format=%H%x1f%ad%x1f%s', $resolvedRevision))[0] -split [char]0x1f, 3
-        $patchLines = @(Invoke-Git (@('--literal-pathspecs', 'show', '--format=', '--no-color', '--no-ext-diff', '--no-textconv', '--unified=3', $resolvedRevision, '--') + $Path))
+        $patchLines = @(Invoke-Git (@('--literal-pathspecs', 'show', '--diff-merges=first-parent', '--format=', '--no-color', '--no-ext-diff', '--no-textconv', '--unified=3', $resolvedRevision, '--') + $Path))
         $patch = if ($patchLines.Count -gt 0) { ($patchLines -join "`n") + "`n" } else { '' }
         if (-not $evidenceDirectory) {
             $evidenceDirectory = Join-Path ([IO.Path]::GetTempPath()) "history-seeder-evidence-$([guid]::NewGuid().ToString('N'))"

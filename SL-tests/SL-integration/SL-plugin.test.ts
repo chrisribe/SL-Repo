@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { access, readFile, readdir, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import type { FormatsPlugin } from "ajv-formats";
@@ -41,6 +42,30 @@ const CREATE_PULL_REQUEST_ACTION =
 const addFormats = createRequire(import.meta.url)(
   "ajv-formats",
 ) as FormatsPlugin;
+
+function slRunGit(
+  repository: string,
+  args: string[],
+  timestamp?: string,
+): string {
+  const result = spawnSync("git", args, {
+    cwd: repository,
+    encoding: "utf8",
+    env: timestamp
+      ? {
+          ...process.env,
+          GIT_AUTHOR_DATE: timestamp,
+          GIT_COMMITTER_DATE: timestamp,
+        }
+      : process.env,
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `git ${args.join(" ")} failed: ${result.stderr || result.stdout}`,
+    );
+  }
+  return result.stdout.trim();
+}
 
 type SLNpmArborist = new (options: {
   path: string;
@@ -243,6 +268,128 @@ describe("SL plugin package", () => {
       await expect(access(evidence.commits[0]!.patchPath)).resolves.toBeUndefined();
     } finally {
       await rm(evidence.evidenceDirectory, { recursive: true, force: true });
+    }
+  });
+
+  test("history seeder captures first-parent evidence for merge commits", async () => {
+    const helper = resolve(
+      "SL-plugin/skills/sl-history-seeder/scripts/Get-HistorySeedEvidence.ps1",
+    );
+    const repository = await mkdtemp(
+      join(tmpdir(), "SL-history-seeder-merge-"),
+    );
+    let evidenceDirectory: string | undefined;
+
+    try {
+      slRunGit(repository, ["init", "--quiet", "--initial-branch=main"]);
+      slRunGit(repository, ["config", "user.name", "SL Test"]);
+      slRunGit(repository, [
+        "config",
+        "user.email",
+        "sl-test@example.invalid",
+      ]);
+
+      await writeFile(join(repository, "base.txt"), "base\n");
+      slRunGit(repository, ["add", "base.txt"]);
+      slRunGit(
+        repository,
+        ["commit", "--quiet", "-m", "base"],
+        "2026-01-01T00:00:00Z",
+      );
+      slRunGit(repository, ["branch", "feature"]);
+
+      await writeFile(join(repository, "main.txt"), "main\n");
+      slRunGit(repository, ["add", "main.txt"]);
+      slRunGit(
+        repository,
+        ["commit", "--quiet", "-m", "main"],
+        "2026-01-02T00:00:00Z",
+      );
+
+      slRunGit(repository, ["switch", "--quiet", "feature"]);
+      await writeFile(join(repository, "feature.txt"), "feature\n");
+      slRunGit(repository, ["add", "feature.txt"]);
+      slRunGit(
+        repository,
+        ["commit", "--quiet", "-m", "feature"],
+        "2026-01-03T00:00:00Z",
+      );
+
+      slRunGit(repository, ["switch", "--quiet", "main"]);
+      slRunGit(
+        repository,
+        ["merge", "--quiet", "--no-ff", "feature", "-m", "merge feature"],
+        "2026-01-04T00:00:00Z",
+      );
+      const mergeRevision = slRunGit(repository, ["rev-parse", "HEAD"]);
+      expect(
+        slRunGit(repository, ["rev-list", "--parents", "-n", "1", "HEAD"]).split(
+          " ",
+        ),
+      ).toHaveLength(3);
+
+      const inventoryResult = spawnSync(
+        "pwsh",
+        [
+          "-NoProfile",
+          "-File",
+          helper,
+          "-RepositoryPath",
+          repository,
+          "-Since",
+          "2000-01-01",
+        ],
+        { encoding: "utf8" },
+      );
+      expect(inventoryResult.status, inventoryResult.stderr).toBe(0);
+      const inventory = JSON.parse(inventoryResult.stdout) as {
+        commits: Array<{
+          revision: string;
+          changedFiles: Array<{ status: string; paths: string[] }>;
+        }>;
+      };
+      expect(
+        inventory.commits.find(
+          (commit) => commit.revision === mergeRevision,
+        )?.changedFiles,
+      ).toEqual([{ status: "A", paths: ["feature.txt"] }]);
+
+      const evidenceResult = spawnSync(
+        "pwsh",
+        [
+          "-NoProfile",
+          "-File",
+          helper,
+          "-RepositoryPath",
+          repository,
+          "-Commit",
+          mergeRevision,
+          "-Path",
+          "feature.txt",
+        ],
+        { encoding: "utf8" },
+      );
+      expect(evidenceResult.status, evidenceResult.stderr).toBe(0);
+      const evidence = JSON.parse(evidenceResult.stdout) as {
+        evidenceDirectory: string;
+        commits: Array<{
+          changedFiles: Array<{ status: string; paths: string[] }>;
+          patchPath: string;
+          patchLineCount: number;
+        }>;
+      };
+      evidenceDirectory = evidence.evidenceDirectory;
+      expect(evidence.commits[0]?.changedFiles).toEqual([
+        { status: "A", paths: ["feature.txt"] },
+      ]);
+      expect(evidence.commits[0]?.patchLineCount).toBeGreaterThan(0);
+      await expect(readFile(evidence.commits[0]!.patchPath, "utf8")).resolves
+        .toContain("+feature");
+    } finally {
+      if (evidenceDirectory) {
+        await rm(evidenceDirectory, { recursive: true, force: true });
+      }
+      await rm(repository, { recursive: true, force: true });
     }
   });
 
