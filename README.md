@@ -137,6 +137,10 @@ pwsh -NoLogo -NoProfile -File $sl sweep --dry-run --json
 The repository-local lifecycle requires PowerShell 7, but not Node.js, npm,
 network access, or external PowerShell modules.
 
+Concurrent mutation of the same repository by the TypeScript CLI and PowerShell
+runtime is unsupported. Callers must serialize these operations externally; see
+the [mutation-lock contract](SL-docs/SL-architecture.md).
+
 ## How learning is shared
 
 Lessons, immutable usage events, projections, promotion state, and managed
