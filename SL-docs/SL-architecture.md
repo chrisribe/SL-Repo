@@ -58,12 +58,18 @@ primary scope, followed by dependencies and ancestors. Existing installations
 without a catalog use a single built-in root scope. See
 [SL hierarchical monorepo scopes](SL-scopes.md).
 
-Every operation that changes registry, discovery-index, or managed frontmatter
-state uses one repository-scoped mutation lock. Scope-local writes update only
-their deterministic shard; the lock carries
+Within each runtime, every operation that changes registry, discovery-index,
+or managed frontmatter state uses one repository-scoped mutation lock.
+Scope-local writes update only their deterministic shard; the lock carries
 owner process, host, timestamp, and random-token metadata, refreshes its lease,
 waits for a bounded interval, and reclaims only demonstrably abandoned locks
 through atomic rename-before-remove.
+
+The TypeScript CLI and repository-local PowerShell runtime do not currently
+share one stale-lock takeover protocol. Concurrent mixed-runtime mutation is
+unsupported; callers must serialize TypeScript and PowerShell mutation
+operations externally. Each runtime independently coordinates concurrent
+writers using that same runtime.
 
 Generated guidance is moved into `.github/sl-learning/sl-probation/` before it
 is registered, so normal Copilot discovery cannot load it. Activation moves a

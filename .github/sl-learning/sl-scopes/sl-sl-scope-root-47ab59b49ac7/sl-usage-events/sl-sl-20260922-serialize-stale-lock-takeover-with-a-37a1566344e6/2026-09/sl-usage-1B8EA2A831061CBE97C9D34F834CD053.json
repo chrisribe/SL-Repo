@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "eventType": "usage",
+  "eventId": "SL-USE-1B8EA2A831061CBE97C9D34F834CD053",
+  "idempotencyKey": "sha256:1b8ea2a831061cbe97c9d34f834cd0532686c104b04d4e886a7d4d95879a694c",
+  "artifactId": "SL-20260922-SERIALIZE-STALE-LOCK-TAKEOVER-WITH-AN-OS-MUTEX",
+  "artifactVersion": "sha256:bbd3a6a48fa29ed5e76059c92ec0d787b3e3b8cc5e240dad01a1a7002f686c78",
+  "artifactContentHash": "bbd3a6a48fa29ed5e76059c92ec0d787b3e3b8cc5e240dad01a1a7002f686c78",
+  "taskRunId": "pr30-review-5778980195",
+  "applicationId": "pr30-mixed-runtime-contract",
+  "stage": "applied",
+  "outcome": "unknown",
+  "verifierType": "unverified",
+  "timestamp": "2026-09-22T15:20:00.000Z",
+  "scope": {
+    "id": "SL-SCOPE-ROOT",
+    "path": "."
+  }
+}
