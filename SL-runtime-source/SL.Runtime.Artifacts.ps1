@@ -110,10 +110,10 @@ function Get-SLArtifactUsageContentHash {
             $Filtered[$Name] = Get-SLProperty $Markdown.frontmatter $Name
         }
     }
-    return Get-SLSha256 -Value (ConvertTo-SLCanonicalJson ([pscustomobject] @{
-        frontmatter = [pscustomobject] $Filtered
-        body = $Markdown.body.Replace("`r`n", "`n").Replace("`r", "`n")
-    }))
+    # Preserve the established TypeScript envelope order; only frontmatter keys are sorted.
+    $FrontmatterJson = ConvertTo-SLCanonicalJson $Filtered
+    $BodyJson = ConvertTo-SLJsonString $Markdown.body.Replace("`r`n", "`n")
+    return Get-SLSha256 -Value ('{"frontmatter":' + $FrontmatterJson + ',"body":' + $BodyJson + '}')
 }
 
 function New-SLCaptureLesson {
@@ -265,7 +265,7 @@ function New-SLCaptureLesson {
         }
         $Registry.artifacts = @($Registry.artifacts) + @($Artifact)
         [void] (Save-SLRegistry -Root $Root -Registry $Registry -Changes $Changes -DryRun:$DryRun)
-        Write-SLIndexes -Root $Root -Registry $Registry -Changes $Changes -Projections @() -DryRun:$DryRun
+        Write-SLIndexes -Root $Root -Registry $Registry -Changes $Changes -Projections @(Project-SLUsageEvents (Get-SLUsageEvents $Root)) -DryRun:$DryRun
         Write-SLLifecycleEvents -Root $Root -Events @($LifecycleEvent) -DryRun:$DryRun
         return [pscustomobject] @{
             id = $Id
@@ -818,7 +818,6 @@ function Sync-SLProjection {
         }
         elseif (@($Events | Where-Object artifactId -ceq $Artifact.id).Count -gt 0) {
             [pscustomobject] @{
-                scope = Normalize-SLScope (Get-SLProperty $Artifact 'scope' $script:SLDefaultScope)
                 artifactId = $Artifact.id
                 artifactVersion = $Version
                 artifactContentHash = $Hash
@@ -837,6 +836,7 @@ function Sync-SLProjection {
                 verifiedFailureCount = 0
                 unknownCount = 0
                 verifiedSuccessRate = $null
+                scope = Normalize-SLScope (Get-SLProperty $Artifact 'scope' $script:SLDefaultScope)
             }
         }
         else {

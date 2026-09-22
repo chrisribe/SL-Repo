@@ -23,9 +23,7 @@
       "scope": {
         "id": "SL-SCOPE-ROOT",
         "path": "."
-      },
-      "lastRetrievedAt": "2026-09-08T14:10:00Z",
-      "lastSuccessfulUseAt": "2026-09-08T14:11:00Z"
+      }
     },
     {
       "id": "SL-20260907-GENERATE-EMBEDDED-POWERSHELL-ARTIFACTS-WITHOUT-SEM",
@@ -46,7 +44,9 @@
       "scope": {
         "id": "SL-SCOPE-ROOT",
         "path": "."
-      }
+      },
+      "lastRetrievedAt": "2026-09-22T18:21:30.634Z",
+      "lastSuccessfulUseAt": "2026-09-22T18:21:33.133Z"
     },
     {
       "id": "SL-20260922-SERIALIZE-STALE-LOCK-TAKEOVER-WITH-AN-OS-MUTEX",
@@ -65,9 +65,7 @@
       "scope": {
         "id": "SL-SCOPE-ROOT",
         "path": "."
-      },
-      "lastRetrievedAt": "2026-09-22T15:20:00Z",
-      "lastSuccessfulUseAt": "2026-09-22T15:30:00Z"
+      }
     },
     {
       "id": "SL-SYSTEM-GITHUBSL-LEARNINGGITATTRIBUTES-981CB1874F4F",

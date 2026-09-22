@@ -534,12 +534,16 @@ function Get-SLProperty {
         return ,$Default
     }
     if ($Value -is [System.Collections.IDictionary]) {
-        [object] $Result = $(if ($Value.Contains($Name)) { $Value[$Name] } else { $Default })
-        return ,$Result
+        if ($Value.Contains($Name)) {
+            return ,$Value[$Name]
+        }
+        return ,$Default
     }
     $Property = $Value.PSObject.Properties[$Name]
-    [object] $Result = $(if ($null -ne $Property) { $Property.Value } else { $Default })
-    return ,$Result
+    if ($null -ne $Property) {
+        return ,$Property.Value
+    }
+    return ,$Default
 }
 
 function Set-SLProperty {
@@ -595,7 +599,11 @@ function Copy-SLValue {
     if ($null -eq $Value) {
         return $null
     }
-    return ConvertFrom-Json -InputObject (ConvertTo-Json -InputObject $Value -Depth 100 -Compress) -Depth 100
+    $Content = ConvertTo-Json -InputObject $Value -Depth 100 -Compress
+    if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('DateKind')) {
+        return ConvertFrom-Json -InputObject $Content -Depth 100 -NoEnumerate -DateKind String
+    }
+    return ConvertFrom-Json -InputObject $Content -Depth 100 -NoEnumerate
 }
 
 function Read-SLJson {
@@ -2737,6 +2745,20 @@ function Get-SLRegistry {
             $Artifacts[[string] $Artifact.id] = $Artifact
         }
     }
+    foreach ($Entry in @($Catalog.scopes)) {
+        if (-not [IO.File]::Exists((Resolve-SLContainedPath -Root $Root -RelativePath ([string] $Entry.projectionPath)))) {
+            continue
+        }
+        $ProjectionShard = Read-SLJson -Root $Root -RelativePath ([string] $Entry.projectionPath)
+        foreach ($Projection in @($ProjectionShard.projections)) {
+            $Artifact = $Artifacts[[string] $Projection.artifactId]
+            if ($null -ne $Artifact -and
+                (Get-SLScopeKey $Artifact.scope) -ceq (Get-SLScopeKey $Projection.scope) -and
+                $Projection.artifactVersion -ceq (Get-SLProperty $ProjectionShard.currentArtifactVersions ([string] $Artifact.id))) {
+                Set-SLProperty $Artifact 'usageProjection' $Projection
+            }
+        }
+    }
     $Values = @($Artifacts.Values)
     $Values = @($Values | Sort-Object -Stable -Property @{ Expression = { [string] $_.id } })
     return [pscustomobject] @{ schemaVersion = 1; artifacts = $Values }
@@ -2889,6 +2911,28 @@ function Assert-SLLifecycleEventsWritable {
     }
 }
 
+function Get-SLCompleteUsageProjections {
+    param(
+        [Parameter(Mandatory)][object] $Registry,
+        [AllowNull()][object[]] $Projections
+    )
+
+    $Complete = [System.Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+    foreach ($Projection in @($Projections) + @(
+        $Registry.artifacts | Where-Object { Test-SLProperty $_ 'usageProjection' } |
+        ForEach-Object { $_.usageProjection }
+    )) {
+        if ($null -ne $Projection) {
+            $Key = "$(Get-SLScopeKey $Projection.scope)`0$($Projection.artifactId)`0$($Projection.artifactVersion)"
+            $Complete[$Key] = $Projection
+        }
+    }
+    return @($Complete.Values | Sort-Object -Stable -Property @(
+        @{ Expression = { [string] $_.artifactId } },
+        @{ Expression = { [string] $_.artifactVersion } }
+    ))
+}
+
 function Write-SLIndexes {
     param(
         [Parameter(Mandatory)]
@@ -2908,6 +2952,7 @@ function Write-SLIndexes {
     )
 
     $Catalog = Get-SLStateCatalog $Root
+    $CompleteProjections = @(Get-SLCompleteUsageProjections -Registry $Registry -Projections $Projections)
     foreach ($Entry in @($Catalog.scopes)) {
         $ScopeKey = Get-SLScopeKey $Entry.scope
         $Artifacts = [System.Collections.Generic.List[object]]::new()
@@ -2953,7 +2998,7 @@ function Write-SLIndexes {
         Write-SLJson -Root $Root -RelativePath ([string] $Entry.indexPath) -Value $Index -Changes $Changes -DryRun:$DryRun
         [object[]] $ScopeProjections = @(
             if ($null -ne $Projections) {
-                $Projections | Where-Object { (Get-SLScopeKey $_.scope) -ceq $ScopeKey } |
+                $CompleteProjections | Where-Object { (Get-SLScopeKey $_.scope) -ceq $ScopeKey } |
                 Sort-Object -Stable -Property @(
                     @{ Expression = { [string] $_.artifactId } },
                     @{ Expression = { [string] $_.artifactVersion } }
@@ -3103,10 +3148,10 @@ function Get-SLArtifactUsageContentHash {
             $Filtered[$Name] = Get-SLProperty $Markdown.frontmatter $Name
         }
     }
-    return Get-SLSha256 -Value (ConvertTo-SLCanonicalJson ([pscustomobject] @{
-        frontmatter = [pscustomobject] $Filtered
-        body = $Markdown.body.Replace("`r`n", "`n").Replace("`r", "`n")
-    }))
+    # Preserve the established TypeScript envelope order; only frontmatter keys are sorted.
+    $FrontmatterJson = ConvertTo-SLCanonicalJson $Filtered
+    $BodyJson = ConvertTo-SLJsonString $Markdown.body.Replace("`r`n", "`n")
+    return Get-SLSha256 -Value ('{"frontmatter":' + $FrontmatterJson + ',"body":' + $BodyJson + '}')
 }
 
 function New-SLCaptureLesson {
@@ -3258,7 +3303,7 @@ function New-SLCaptureLesson {
         }
         $Registry.artifacts = @($Registry.artifacts) + @($Artifact)
         [void] (Save-SLRegistry -Root $Root -Registry $Registry -Changes $Changes -DryRun:$DryRun)
-        Write-SLIndexes -Root $Root -Registry $Registry -Changes $Changes -Projections @() -DryRun:$DryRun
+        Write-SLIndexes -Root $Root -Registry $Registry -Changes $Changes -Projections @(Project-SLUsageEvents (Get-SLUsageEvents $Root)) -DryRun:$DryRun
         Write-SLLifecycleEvents -Root $Root -Events @($LifecycleEvent) -DryRun:$DryRun
         return [pscustomobject] @{
             id = $Id
@@ -3811,7 +3856,6 @@ function Sync-SLProjection {
         }
         elseif (@($Events | Where-Object artifactId -ceq $Artifact.id).Count -gt 0) {
             [pscustomobject] @{
-                scope = Normalize-SLScope (Get-SLProperty $Artifact 'scope' $script:SLDefaultScope)
                 artifactId = $Artifact.id
                 artifactVersion = $Version
                 artifactContentHash = $Hash
@@ -3830,6 +3874,7 @@ function Sync-SLProjection {
                 verifiedFailureCount = 0
                 unknownCount = 0
                 verifiedSuccessRate = $null
+                scope = Normalize-SLScope (Get-SLProperty $Artifact 'scope' $script:SLDefaultScope)
             }
         }
         else {
@@ -7299,7 +7344,24 @@ function Test-SLRepository {
             $Issues.Add((New-SLValidationIssue error 'usage-application-outcome' "Application $ApplicationId has conflicting terminal outcomes." $null))
         }
     }
-    $ExpectedProjections = @(Project-SLUsageEvents $UsageEvents)
+    $ProjectedRegistry = $Registry
+    try {
+        $ProjectedRegistry = Sync-SLProjection -Root $Root -DryRun -SuppliedEvents $UsageEvents
+        foreach ($Artifact in @($Registry.artifacts)) {
+            $ExpectedArtifact = @($ProjectedRegistry.artifacts | Where-Object id -ceq $Artifact.id)[0]
+            foreach ($Name in @('status', 'lastRetrievedAt', 'lastSuccessfulUseAt')) {
+                if ((ConvertTo-SLReportJson (Get-SLProperty $Artifact $Name)) -cne
+                    (ConvertTo-SLReportJson (Get-SLProperty $ExpectedArtifact $Name))) {
+                    $Issues.Add((New-SLValidationIssue error 'usage-projection-drift' 'Scope registry lifecycle projection is stale; run a usage command or project.' ([string] $Artifact.path)))
+                    break
+                }
+            }
+        }
+    }
+    catch {
+        $Issues.Add((New-SLValidationIssue error 'usage-projection-invalid' $_.Exception.Message))
+    }
+    $ExpectedProjections = @(Get-SLCompleteUsageProjections -Registry $ProjectedRegistry -Projections @(Project-SLUsageEvents $UsageEvents))
     foreach ($Entry in @($StateCatalog.scopes)) {
         $ProjectionPath = Resolve-SLContainedPath -Root $Root -RelativePath ([string] $Entry.projectionPath
         )
@@ -7314,12 +7376,20 @@ function Test-SLRepository {
         try {
             $Stored = Read-SLJson -Root $Root -RelativePath ([string] $Entry.projectionPath)
             [object[]] $Expected = @($ExpectedProjections | Where-Object { (Get-SLScopeKey $_.scope) -ceq (Get-SLScopeKey $Entry.scope) })
+            $ExpectedVersions = [ordered] @{}
+            foreach ($Artifact in @($ProjectedRegistry.artifacts)) {
+                if ((Get-SLScopeKey (Get-SLProperty $Artifact 'scope' $script:SLDefaultScope)) -ceq (Get-SLScopeKey $Entry.scope) -and
+                    (Test-SLProperty $Artifact 'usageProjection')) {
+                    $ExpectedVersions[[string] $Artifact.id] = [string] $Artifact.usageProjection.artifactVersion
+                }
+            }
             [object[]] $StoredProjections = @($Stored.projections | Where-Object { $null -ne $_ })
             $ProjectionMatches = (
+                (ConvertTo-SLCanonicalJson $Stored.currentArtifactVersions) -ceq (ConvertTo-SLCanonicalJson $ExpectedVersions) -and
                 $Expected.Count -eq $StoredProjections.Count -and
                 (
                     $Expected.Count -eq 0 -or
-                    (ConvertTo-SLCanonicalJson -Value (, $StoredProjections)) -ceq (ConvertTo-SLCanonicalJson -Value (, $Expected))
+                    (ConvertTo-SLReportJson -Value (, $StoredProjections)) -ceq (ConvertTo-SLReportJson -Value (, $Expected))
                 )
             )
             if (-not $ProjectionMatches) {

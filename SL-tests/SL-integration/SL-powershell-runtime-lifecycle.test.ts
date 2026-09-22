@@ -14,6 +14,24 @@ import { afterEach, describe, expect, test } from "vitest";
 import { slInstall } from "../../SL-src/SL-core/SL-installer.js";
 import { slCalculateEfficiencyReport } from "../../SL-src/SL-core/SL-efficiency.js";
 import {
+  slParseMarkdown,
+  slStringifyMarkdown,
+} from "../../SL-src/SL-core/SL-frontmatter.js";
+import { slLoadRegistry } from "../../SL-src/SL-core/SL-registry.js";
+import {
+  SL_DEFAULT_SCOPE,
+  slScopeCatalogEntry,
+} from "../../SL-src/SL-core/SL-state.js";
+import {
+  slApplyUsageProjection,
+  slArtifactUsageContentHash,
+  slFinishUsage,
+  slLoadUsageEvents,
+  slStartUsage,
+  slSynchronizeUsageProjection,
+} from "../../SL-src/SL-core/SL-usage.js";
+import { slValidateRepository } from "../../SL-src/SL-validation/SL-validation.js";
+import {
   slCreateTestRepository,
   slRemoveTestRepository,
 } from "../SL-fixtures/SL-test-repository.js";
@@ -82,7 +100,7 @@ function runRuntimeWithoutJson(
 function jsonOutput(result: ReturnType<typeof spawnSync>): unknown {
   const stderr = String(result.stderr ?? "");
   const stdout = String(result.stdout ?? "");
-  expect(result.status, stderr).toBe(0);
+  expect(result.status, `${stderr}\n${stdout}`).toBe(0);
   return JSON.parse(stdout);
 }
 
@@ -129,6 +147,114 @@ async function waitForPath(path: string, timeoutMs = TEST_TIMEOUT_MS): Promise<v
 }
 
 describe("repository-local PowerShell lifecycle", () => {
+  test(
+    "keeps usage hashes and automatic mutation projections portable without rewriting history",
+    async () => {
+      const root = await createPowerShellRepository();
+      const capture = (title: string) =>
+        jsonOutput(runRuntime(root, [
+          "capture", "--title", title, "--kind", "win",
+          "--trigger", "cross-platform distribution", "--now", FIXED_DATE,
+        ])) as { id: string; path: string };
+      const validate = async () => {
+        const registry = await slLoadRegistry(root);
+        const projected = structuredClone(registry);
+        await slApplyUsageProjection(root, projected, await slLoadUsageEvents(root));
+        expect(registry).toEqual(projected);
+        expect((await slValidateRepository(root)).filter(
+          (issue) => issue.severity === "error",
+        )).toEqual([]);
+        jsonOutput(runRuntime(root, ["validate"]));
+      };
+      const lesson = capture("Portable usage projection");
+      const lessonPath = join(root, ...lesson.path.split("/"));
+      const markdown = slParseMarkdown(await readFile(lessonPath, "utf8"));
+      markdown.frontmatter.trigger = ["portable installer", "cross-platform distribution"];
+      markdown.frontmatter.relatedTo = [];
+      const content = slStringifyMarkdown(markdown.frontmatter, markdown.body);
+      await writeFile(lessonPath, content.replaceAll("\n", "\r\n"));
+      const hash = slArtifactUsageContentHash(content);
+
+      const started = jsonOutput(runRuntime(root, [
+        "use", "start", lesson.id, "--application-id", "portable-first",
+        "--task-run-id", "portable-first", "--now", FIXED_DATE,
+      ])) as { receiptId: string; artifactContentHash: string };
+      expect(started.artifactContentHash).toBe(hash);
+      await validate();
+      await slFinishUsage(root, started.receiptId, {
+        outcome: "success", verified: true, verifierType: "test",
+        now: new Date(FIXED_DATE),
+      });
+      await validate();
+      jsonOutput(runRuntime(root, [
+        "vote", lesson.id, "--result", "useful",
+        "--application-id", "portable-second", "--task-run-id", "portable-second",
+        "--now", FIXED_DATE,
+      ]));
+      await validate();
+      expect((await slLoadRegistry(root)).artifacts.find(
+        (artifact) => artifact.id === lesson.id,
+      )?.status).toBe("distilled");
+      const history = await slLoadUsageEvents(root);
+      const historicalBytes = await repositorySnapshot(root);
+
+      // Direct edits are not watched. The next usage mutation refreshes current versions.
+      await writeFile(lessonPath, (await readFile(lessonPath, "utf8")) + "\nUpdated evidence.\n");
+      expect((await slValidateRepository(root)).some(
+        (issue) => issue.code === "usage-projection-drift",
+      )).toBe(true);
+      expect(runRuntime(root, ["validate"]).status).not.toBe(0);
+      const other = capture("Single trigger and empty relations");
+      const otherStart = jsonOutput(runRuntime(root, [
+        "use", "start", other.id, "--application-id", "portable-other",
+        "--task-run-id", "portable-other", "--now", FIXED_DATE,
+      ])) as { artifactContentHash: string };
+      expect(otherStart.artifactContentHash).toBe(slArtifactUsageContentHash(
+        await readFile(join(root, ...other.path.split("/")), "utf8"),
+      ));
+      await validate();
+      const current = (await slLoadRegistry(root)).artifacts.find(
+        (artifact) => artifact.id === lesson.id,
+      )!;
+      expect(current.usageProjection?.verifiedSuccessCount).toBe(0);
+      expect(current.status).toBe("raw");
+      capture("Preserve historical projections");
+      await validate();
+      expect((await slLoadUsageEvents(root)).filter(
+        (event) => event.artifactId === lesson.id,
+      )).toEqual(history);
+      for (const [path, bytes] of historicalBytes) {
+        if (path.includes("sl-usage-events")) {
+          expect(await readFile(join(root, path))).toEqual(bytes);
+        }
+      }
+
+      const projectionPath = join(
+        root,
+        ...slScopeCatalogEntry(SL_DEFAULT_SCOPE).projectionPath.split("/"),
+      );
+      const projection = await readFile(projectionPath, "utf8");
+      await slSynchronizeUsageProjection(root, false);
+      expect(await readFile(projectionPath, "utf8")).toBe(projection);
+      const before = await repositorySnapshot(root);
+      jsonOutput(runRuntime(root, ["project"]));
+      await validate();
+      expect(await repositorySnapshot(root)).toEqual(before);
+
+      // TypeScript starts can be finished by PowerShell on the same content version.
+      const resumed = await slStartUsage(root, lesson.id, {
+        applicationId: "portable-resumed", taskRunId: "portable-resumed",
+        now: new Date(FIXED_DATE),
+      });
+      jsonOutput(runRuntime(root, [
+        "use", "finish", resumed.receiptId, "--outcome", "success", "--verified",
+        "--verifier-type", "test", "--now", FIXED_DATE,
+      ]));
+      await validate();
+    },
+    SUITE_TEST_TIMEOUT_MS,
+  );
+
   test(
     "enforces deterministic lowercase skill names during PowerShell promotion",
     async () => {

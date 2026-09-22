@@ -506,12 +506,16 @@ function Get-SLProperty {
         return ,$Default
     }
     if ($Value -is [System.Collections.IDictionary]) {
-        [object] $Result = $(if ($Value.Contains($Name)) { $Value[$Name] } else { $Default })
-        return ,$Result
+        if ($Value.Contains($Name)) {
+            return ,$Value[$Name]
+        }
+        return ,$Default
     }
     $Property = $Value.PSObject.Properties[$Name]
-    [object] $Result = $(if ($null -ne $Property) { $Property.Value } else { $Default })
-    return ,$Result
+    if ($null -ne $Property) {
+        return ,$Property.Value
+    }
+    return ,$Default
 }
 
 function Set-SLProperty {
@@ -567,7 +571,11 @@ function Copy-SLValue {
     if ($null -eq $Value) {
         return $null
     }
-    return ConvertFrom-Json -InputObject (ConvertTo-Json -InputObject $Value -Depth 100 -Compress) -Depth 100
+    $Content = ConvertTo-Json -InputObject $Value -Depth 100 -Compress
+    if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('DateKind')) {
+        return ConvertFrom-Json -InputObject $Content -Depth 100 -NoEnumerate -DateKind String
+    }
+    return ConvertFrom-Json -InputObject $Content -Depth 100 -NoEnumerate
 }
 
 function Read-SLJson {

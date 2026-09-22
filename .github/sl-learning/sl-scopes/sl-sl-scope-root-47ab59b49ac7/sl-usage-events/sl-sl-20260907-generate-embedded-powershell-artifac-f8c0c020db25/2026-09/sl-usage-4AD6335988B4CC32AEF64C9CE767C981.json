@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "eventType": "usage",
+  "eventId": "SL-USE-4AD6335988B4CC32AEF64C9CE767C981",
+  "idempotencyKey": "sha256:4ad6335988b4cc32aef64c9ce767c9810ad84c461742ddd3cc59fa111f8af75f",
+  "artifactId": "SL-20260907-GENERATE-EMBEDDED-POWERSHELL-ARTIFACTS-WITHOUT-SEM",
+  "artifactVersion": "sha256:6d82dc1a7b32b9ddee88f7e9589f655acf20c793cf4d1854c6ac4e6909def63c",
+  "artifactContentHash": "6d82dc1a7b32b9ddee88f7e9589f655acf20c793cf4d1854c6ac4e6909def63c",
+  "taskRunId": "pr30-projection-parity-repair",
+  "applicationId": "pr30-projection-parity-repair",
+  "stage": "verified",
+  "outcome": "success",
+  "verifierType": "test",
+  "timestamp": "2026-09-22T18:21:33.133Z",
+  "scope": {
+    "id": "SL-SCOPE-ROOT",
+    "path": "."
+  }
+}

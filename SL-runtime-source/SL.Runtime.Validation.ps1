@@ -295,7 +295,24 @@ function Test-SLRepository {
             $Issues.Add((New-SLValidationIssue error 'usage-application-outcome' "Application $ApplicationId has conflicting terminal outcomes." $null))
         }
     }
-    $ExpectedProjections = @(Project-SLUsageEvents $UsageEvents)
+    $ProjectedRegistry = $Registry
+    try {
+        $ProjectedRegistry = Sync-SLProjection -Root $Root -DryRun -SuppliedEvents $UsageEvents
+        foreach ($Artifact in @($Registry.artifacts)) {
+            $ExpectedArtifact = @($ProjectedRegistry.artifacts | Where-Object id -ceq $Artifact.id)[0]
+            foreach ($Name in @('status', 'lastRetrievedAt', 'lastSuccessfulUseAt')) {
+                if ((ConvertTo-SLReportJson (Get-SLProperty $Artifact $Name)) -cne
+                    (ConvertTo-SLReportJson (Get-SLProperty $ExpectedArtifact $Name))) {
+                    $Issues.Add((New-SLValidationIssue error 'usage-projection-drift' 'Scope registry lifecycle projection is stale; run a usage command or project.' ([string] $Artifact.path)))
+                    break
+                }
+            }
+        }
+    }
+    catch {
+        $Issues.Add((New-SLValidationIssue error 'usage-projection-invalid' $_.Exception.Message))
+    }
+    $ExpectedProjections = @(Get-SLCompleteUsageProjections -Registry $ProjectedRegistry -Projections @(Project-SLUsageEvents $UsageEvents))
     foreach ($Entry in @($StateCatalog.scopes)) {
         $ProjectionPath = Resolve-SLContainedPath -Root $Root -RelativePath ([string] $Entry.projectionPath
         )
@@ -310,12 +327,20 @@ function Test-SLRepository {
         try {
             $Stored = Read-SLJson -Root $Root -RelativePath ([string] $Entry.projectionPath)
             [object[]] $Expected = @($ExpectedProjections | Where-Object { (Get-SLScopeKey $_.scope) -ceq (Get-SLScopeKey $Entry.scope) })
+            $ExpectedVersions = [ordered] @{}
+            foreach ($Artifact in @($ProjectedRegistry.artifacts)) {
+                if ((Get-SLScopeKey (Get-SLProperty $Artifact 'scope' $script:SLDefaultScope)) -ceq (Get-SLScopeKey $Entry.scope) -and
+                    (Test-SLProperty $Artifact 'usageProjection')) {
+                    $ExpectedVersions[[string] $Artifact.id] = [string] $Artifact.usageProjection.artifactVersion
+                }
+            }
             [object[]] $StoredProjections = @($Stored.projections | Where-Object { $null -ne $_ })
             $ProjectionMatches = (
+                (ConvertTo-SLCanonicalJson $Stored.currentArtifactVersions) -ceq (ConvertTo-SLCanonicalJson $ExpectedVersions) -and
                 $Expected.Count -eq $StoredProjections.Count -and
                 (
                     $Expected.Count -eq 0 -or
-                    (ConvertTo-SLCanonicalJson -Value (, $StoredProjections)) -ceq (ConvertTo-SLCanonicalJson -Value (, $Expected))
+                    (ConvertTo-SLReportJson -Value (, $StoredProjections)) -ceq (ConvertTo-SLReportJson -Value (, $Expected))
                 )
             )
             if (-not $ProjectionMatches) {
