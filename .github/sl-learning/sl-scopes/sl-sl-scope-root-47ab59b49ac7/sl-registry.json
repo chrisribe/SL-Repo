@@ -23,9 +23,7 @@
       "scope": {
         "id": "SL-SCOPE-ROOT",
         "path": "."
-      },
-      "lastRetrievedAt": "2026-09-08T14:10:00Z",
-      "lastSuccessfulUseAt": "2026-09-08T14:11:00Z"
+      }
     },
     {
       "id": "SL-20260907-GENERATE-EMBEDDED-POWERSHELL-ARTIFACTS-WITHOUT-SEM",
