@@ -981,6 +981,62 @@ function Invoke-SLWithMutationTransaction {
     }
 }
 
+function New-SLMutationLockLease {
+    param(
+        [Parameter(Mandatory)]
+        [string] $LockPath,
+
+        [Parameter(Mandatory)]
+        [string] $LeaseId
+    )
+
+    New-Item -ItemType Directory -Path $LockPath -ErrorAction Stop | Out-Null
+    $OwnerPath = [IO.Path]::Combine($LockPath, 'SL-owner.json')
+    $Owner = [ordered] @{
+        schemaVersion = 1
+        token = $LeaseId
+        pid = $PID
+        hostname = [Environment]::MachineName
+        acquiredAt = Get-SLNormalizedTimestamp
+    }
+    [IO.File]::WriteAllText(
+        $OwnerPath,
+        "$(ConvertTo-Json $Owner -Depth 10)`n",
+        [Text.UTF8Encoding]::new($false)
+    )
+}
+
+function Invoke-SLWithMutationMutex {
+    param(
+        [Parameter(Mandatory)]
+        [Threading.Mutex] $Mutex,
+
+        [Parameter(Mandatory)]
+        [scriptblock] $Action,
+
+        [int] $TimeoutMilliseconds = -1
+    )
+
+    $MutexHeld = $false
+    try {
+        try {
+            $MutexHeld = $Mutex.WaitOne($TimeoutMilliseconds)
+        }
+        catch [Threading.AbandonedMutexException] {
+            $MutexHeld = $true
+        }
+        if (-not $MutexHeld) {
+            return $false
+        }
+        return & $Action
+    }
+    finally {
+        if ($MutexHeld) {
+            $Mutex.ReleaseMutex()
+        }
+    }
+}
+
 function Invoke-SLWithMutationLock {
     param(
         [Parameter(Mandatory)]
@@ -993,7 +1049,9 @@ function Invoke-SLWithMutationLock {
 
         [int] $StaleMilliseconds = 120000,
 
-        [int] $TimeoutMilliseconds = 120000
+        [int] $TimeoutMilliseconds = 120000,
+
+        [scriptblock] $BeforeStaleMove
     )
 
     if ($DryRun) {
@@ -1005,116 +1063,125 @@ function Invoke-SLWithMutationLock {
     $LeaseId = [Guid]::NewGuid().ToString()
     $Deadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMilliseconds)
     $Acquired = $false
-    while ([DateTime]::UtcNow -lt $Deadline) {
-        try {
-            New-Item -ItemType Directory -Path $LockPath -ErrorAction Stop | Out-Null
-            $OwnerPath = [IO.Path]::Combine($LockPath, 'SL-owner.json')
-            $Owner = [ordered] @{
-                schemaVersion = 1
-                token = $LeaseId
-                pid = $PID
-                hostname = [Environment]::MachineName
-                acquiredAt = Get-SLNormalizedTimestamp
-            }
-            [IO.File]::WriteAllText(
-                $OwnerPath,
-                "$(ConvertTo-Json $Owner -Depth 10)`n",
-                [Text.UTF8Encoding]::new($false)
+    $MutexIdentity = [IO.Path]::GetFullPath($LockPath)
+    if ($IsWindows) {
+        $MutexIdentity = $MutexIdentity.ToUpperInvariant()
+    }
+    $MutexName = "SL-mutation-lock-$(Get-SLSha256 -Value $MutexIdentity)"
+    $AcquisitionMutex = [Threading.Mutex]::new($false, $MutexName)
+    try {
+        while ([DateTime]::UtcNow -lt $Deadline) {
+            $RemainingMilliseconds = [Math]::Max(
+                1,
+                [Math]::Min(
+                    25,
+                    [int] [Math]::Ceiling(($Deadline - [DateTime]::UtcNow).TotalMilliseconds)
+                )
             )
-            $Acquired = $true
-            break
-        }
-        catch {
-            try {
-                if ([IO.Directory]::Exists($LockPath)) {
-                    $Info = [IO.DirectoryInfo]::new($LockPath)
-                    $ObservedWriteTimeUtc = $Info.LastWriteTimeUtc
-                    $Expired = ([DateTime]::UtcNow - $ObservedWriteTimeUtc).TotalMilliseconds -ge $StaleMilliseconds
-                    $OwnerPath = [IO.Path]::Combine($LockPath, 'SL-owner.json')
-                    $Live = $false
-                    $ObservedOwnerToken = $null
+            $Acquired = Invoke-SLWithMutationMutex -Mutex $AcquisitionMutex -TimeoutMilliseconds $RemainingMilliseconds -Action {
+                try {
+                    New-SLMutationLockLease -LockPath $LockPath -LeaseId $LeaseId
+                    return $true
+                }
+                catch {
                     try {
-                        $Owner = ConvertFrom-Json ([IO.File]::ReadAllText($OwnerPath)) -Depth 10
-                        $ObservedOwnerToken = [string] $Owner.token
-                        if ($Owner.hostname -ceq [Environment]::MachineName) {
+                        if ([IO.Directory]::Exists($LockPath)) {
+                            $Info = [IO.DirectoryInfo]::new($LockPath)
+                            $ObservedWriteTimeUtc = $Info.LastWriteTimeUtc
+                            $Expired = ([DateTime]::UtcNow - $ObservedWriteTimeUtc).TotalMilliseconds -ge $StaleMilliseconds
+                            $OwnerPath = [IO.Path]::Combine($LockPath, 'SL-owner.json')
+                            $Live = $false
+                            $ObservedOwnerToken = $null
                             try {
-                                $Process = [Diagnostics.Process]::GetProcessById([int] $Owner.pid)
-                                $Live = -not $Process.HasExited
+                                $Owner = ConvertFrom-Json ([IO.File]::ReadAllText($OwnerPath)) -Depth 10
+                                $ObservedOwnerToken = [string] $Owner.token
+                                if ($Owner.hostname -ceq [Environment]::MachineName) {
+                                    try {
+                                        $Process = [Diagnostics.Process]::GetProcessById([int] $Owner.pid)
+                                        $Live = -not $Process.HasExited
+                                    }
+                                    catch {
+                                        $Live = $false
+                                    }
+                                }
                             }
                             catch {
                                 $Live = $false
                             }
+                            if ($Expired -and -not $Live) {
+                                $StalePath = "$LockPath.SL-stale-$([Guid]::NewGuid().ToString('N'))"
+                                try {
+                                    $CurrentInfo = [IO.DirectoryInfo]::new($LockPath)
+                                    $CurrentOwnerToken = $null
+                                    try {
+                                        $CurrentOwner = ConvertFrom-Json ([IO.File]::ReadAllText($OwnerPath)) -Depth 10
+                                        $CurrentOwnerToken = [string] $CurrentOwner.token
+                                    }
+                                    catch {
+                                    }
+                                    if (
+                                        $CurrentInfo.LastWriteTimeUtc -eq $ObservedWriteTimeUtc -and
+                                        $CurrentOwnerToken -ceq $ObservedOwnerToken
+                                    ) {
+                                        if ($BeforeStaleMove) {
+                                            & $BeforeStaleMove
+                                        }
+                                        [IO.Directory]::Move($LockPath, $StalePath)
+                                        [IO.Directory]::Delete($StalePath, $true)
+                                        New-SLMutationLockLease -LockPath $LockPath -LeaseId $LeaseId
+                                        return $true
+                                    }
+                                }
+                                catch {
+                                }
+                            }
                         }
                     }
                     catch {
-                        $Live = $false
-                    }
-                    if ($Expired -and -not $Live) {
-                        $StalePath = "$LockPath.SL-stale-$([Guid]::NewGuid().ToString('N'))"
-                        try {
-                            $CurrentInfo = [IO.DirectoryInfo]::new($LockPath)
-                            $CurrentOwnerToken = $null
-                            try {
-                                $CurrentOwner = ConvertFrom-Json ([IO.File]::ReadAllText($OwnerPath)) -Depth 10
-                                $CurrentOwnerToken = [string] $CurrentOwner.token
-                            }
-                            catch {
-                            }
-                            if (
-                                $CurrentInfo.LastWriteTimeUtc -ne $ObservedWriteTimeUtc -or
-                                $CurrentOwnerToken -cne $ObservedOwnerToken
-                            ) {
-                                continue
-                            }
-                            [IO.Directory]::Move($LockPath, $StalePath)
-                            [IO.Directory]::Delete($StalePath, $true)
-                            continue
-                        }
-                        catch {
-                        }
+                        # The lock may disappear between Exists and metadata reads.
                     }
                 }
+                return $false
             }
-            catch {
-                # The lock may disappear between Exists and metadata reads.
+            if ($Acquired) {
+                break
             }
             Start-Sleep -Milliseconds 25
         }
-    }
-    if (-not $Acquired) {
-        Throw-SLContractError -Code 'mutation-lock-timeout' -Message "Timed out waiting for SL repository mutation lock: $RelativeLock"
-    }
-    $PreviousActiveLockPath = $script:SLActiveMutationLockPath
-    $script:SLActiveMutationLockPath = $LockPath
-    try {
-        return Invoke-SLWithMutationTransaction -Root $Root -Operation $Operation
+        if (-not $Acquired) {
+            Throw-SLContractError -Code 'mutation-lock-timeout' -Message "Timed out waiting for SL repository mutation lock: $RelativeLock"
+        }
+        $PreviousActiveLockPath = $script:SLActiveMutationLockPath
+        $script:SLActiveMutationLockPath = $LockPath
+        try {
+            return Invoke-SLWithMutationTransaction -Root $Root -Operation $Operation
+        }
+        finally {
+            $script:SLActiveMutationLockPath = $PreviousActiveLockPath
+            Invoke-SLWithMutationMutex -Mutex $AcquisitionMutex -Action {
+                $OwnerPath = [IO.Path]::Combine($LockPath, 'SL-owner.json')
+                for ($Attempt = 0; $Attempt -lt 40; $Attempt += 1) {
+                    try {
+                        if (-not [IO.Directory]::Exists($LockPath)) {
+                            return
+                        }
+                        $Owner = ConvertFrom-Json ([IO.File]::ReadAllText($OwnerPath)) -Depth 10
+                        if ($Owner.token -cne $LeaseId) {
+                            return
+                        }
+                        [IO.Directory]::Delete($LockPath, $true)
+                        return
+                    }
+                    catch {
+                        Start-Sleep -Milliseconds 25
+                    }
+                }
+                Throw-SLContractError -Code 'mutation-lock-release' -Message "Failed to release SL repository mutation lock: $RelativeLock"
+            }
+        }
     }
     finally {
-        $script:SLActiveMutationLockPath = $PreviousActiveLockPath
-        $OwnerPath = [IO.Path]::Combine($LockPath, 'SL-owner.json')
-        $Released = $false
-        for ($Attempt = 0; $Attempt -lt 40; $Attempt += 1) {
-            try {
-                if (-not [IO.Directory]::Exists($LockPath)) {
-                    $Released = $true
-                    break
-                }
-                $Owner = ConvertFrom-Json ([IO.File]::ReadAllText($OwnerPath)) -Depth 10
-                if ($Owner.token -cne $LeaseId) {
-                    $Released = $true
-                    break
-                }
-                [IO.Directory]::Delete($LockPath, $true)
-                $Released = $true
-                break
-            }
-            catch {
-                Start-Sleep -Milliseconds 25
-            }
-        }
-        if (-not $Released) {
-            Throw-SLContractError -Code 'mutation-lock-release' -Message "Failed to release SL repository mutation lock: $RelativeLock"
-        }
+        $AcquisitionMutex.Dispose()
     }
 }
 

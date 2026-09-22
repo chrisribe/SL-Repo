@@ -9,6 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, describe, expect, test } from "vitest";
 import { slInstall } from "../../SL-src/SL-core/SL-installer.js";
 import { slCalculateEfficiencyReport } from "../../SL-src/SL-core/SL-efficiency.js";
@@ -109,6 +110,22 @@ async function createPowerShellRepository(): Promise<string> {
   repositories.push(root);
   await slInstall(root, "init", false);
   return root;
+}
+
+async function waitForPath(path: string, timeoutMs = TEST_TIMEOUT_MS): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      await stat(path);
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+    }
+    await delay(10);
+  }
+  throw new Error(`Timed out waiting for path: ${path}`);
 }
 
 describe("repository-local PowerShell lifecycle", () => {
@@ -611,6 +628,198 @@ describe("repository-local PowerShell lifecycle", () => {
         runRuntime(root, ["stats", capture.id]),
       ) as Array<{ verifiedSuccessCount: number }>;
       expect(projections[0]?.verifiedSuccessCount).toBe(2);
+    },
+    SUITE_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    "prevents a replacement lock between stale revalidation and takeover",
+    async () => {
+      const root = await createPowerShellRepository();
+      const lockPath = join(
+        root,
+        ".github",
+        "sl-learning",
+        ".sl-repository-mutation.lock",
+      );
+      await mkdir(lockPath);
+      await writeFile(
+        join(lockPath, "SL-owner.json"),
+        `${JSON.stringify({
+          schemaVersion: 1,
+          token: "abandoned",
+          pid: 2_147_483_647,
+          hostname: process.env.COMPUTERNAME ?? "unknown",
+          acquiredAt: "2026-09-01T00:00:00.000Z",
+        })}\n`,
+      );
+      const old = new Date("2026-09-01T00:00:00.000Z");
+      await utimes(lockPath, old, old);
+
+      const contenderScript = join(root, "SL-mutation-lock-contender.ps1");
+      await writeFile(
+        contenderScript,
+        [
+          "param(",
+          "    [Parameter(Mandatory)][string] $ModulePath,",
+          "    [Parameter(Mandatory)][string] $Root,",
+          "    [Parameter(Mandatory)][string] $AcquiredPath,",
+          "    [Parameter(Mandatory)][string] $ReleasePath,",
+          "    [string] $ReadyPath,",
+          "    [string] $ContinuePath,",
+          "    [switch] $ExpectTimeout",
+          ")",
+          "$Module = Import-Module $ModulePath -Force -PassThru",
+          "& $Module {",
+          "    param($Root, $AcquiredPath, $ReleasePath, $ReadyPath, $ContinuePath, $ExpectTimeout)",
+          "    $BeforeStaleMove = $null",
+          "    if ($ReadyPath) {",
+          "        $BeforeStaleMove = {",
+          "            [IO.File]::WriteAllText($ReadyPath, 'ready')",
+          "            while (-not [IO.File]::Exists($ContinuePath)) {",
+          "                Start-Sleep -Milliseconds 10",
+          "            }",
+          "        }.GetNewClosure()",
+          "    }",
+          "    $Operation = {",
+          "        [IO.File]::WriteAllText($AcquiredPath, 'acquired')",
+          "        while (-not [IO.File]::Exists($ReleasePath)) {",
+          "            Start-Sleep -Milliseconds 10",
+          "        }",
+          "    }.GetNewClosure()",
+          "    $TimeoutMilliseconds = if ($ExpectTimeout) { 1000 } else { 10000 }",
+          "    try {",
+          "        Invoke-SLWithMutationLock `",
+          "            -Root $Root `",
+          "            -Operation $Operation `",
+          "            -StaleMilliseconds 10 `",
+          "            -TimeoutMilliseconds $TimeoutMilliseconds `",
+          "            -BeforeStaleMove $BeforeStaleMove",
+          "    } catch {",
+          "        if ($ExpectTimeout -and $_.Exception.Data['SLCode'] -ceq 'mutation-lock-timeout') {",
+          "            return",
+          "        }",
+          "        throw",
+          "    }",
+          "    if ($ExpectTimeout) {",
+          "        throw 'Expected mutation-lock-timeout while takeover was paused.'",
+          "    }",
+          "} $Root $AcquiredPath $ReleasePath $ReadyPath $ContinuePath $ExpectTimeout",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const modulePath = join(
+        root,
+        ".github",
+        "sl-learning",
+        "sl-runtime",
+        "sl.runtime.psm1",
+      );
+      const readyPath = join(root, "first-ready");
+      const continuePath = join(root, "continue-first");
+      const firstAcquiredPath = join(root, "first-acquired");
+      const releaseFirstPath = join(root, "release-first");
+      const secondAcquiredPath = join(root, "second-acquired");
+      const releaseSecondPath = join(root, "release-second");
+      await writeFile(releaseSecondPath, "release", "utf8");
+
+      const contenders: Array<Promise<void>> = [];
+      const launch = (
+        acquiredPath: string,
+        releasePath: string,
+        pauseBeforeMove: boolean,
+        expectTimeout = false,
+      ): Promise<void> => {
+        const child = spawn(
+          "pwsh",
+          [
+            "-NoLogo",
+            "-NoProfile",
+            "-File",
+            contenderScript,
+            "-ModulePath",
+            modulePath,
+            "-Root",
+            root,
+            "-AcquiredPath",
+            acquiredPath,
+            "-ReleasePath",
+            releasePath,
+            ...(pauseBeforeMove
+              ? [
+                  "-ReadyPath",
+                  readyPath,
+                  "-ContinuePath",
+                  continuePath,
+                ]
+              : []),
+            ...(expectTimeout ? ["-ExpectTimeout"] : []),
+          ],
+          { cwd: root, stdio: ["ignore", "pipe", "pipe"] },
+        );
+        const completed = new Promise<void>((resolvePromise, rejectPromise) => {
+          let stderr = "";
+          child.stderr.setEncoding("utf8");
+          child.stderr.on("data", (chunk: string) => {
+            stderr += chunk;
+          });
+          child.once("error", rejectPromise);
+          child.once("exit", (code) =>
+            code === 0
+              ? resolvePromise()
+              : rejectPromise(
+                  new Error(
+                    `pwsh exited ${String(code)}: ${stderr.trim()}`,
+                  ),
+                ),
+          );
+        });
+        void completed.catch(() => undefined);
+        contenders.push(completed);
+        return completed;
+      };
+
+      try {
+        const first = launch(
+          firstAcquiredPath,
+          releaseFirstPath,
+          true,
+        );
+        await waitForPath(readyPath);
+        const staleOwner = await readFile(join(lockPath, "SL-owner.json"));
+
+        await launch(
+          secondAcquiredPath,
+          releaseSecondPath,
+          false,
+          true,
+        );
+        await expect(stat(secondAcquiredPath)).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+        expect(await readFile(join(lockPath, "SL-owner.json"))).toEqual(staleOwner);
+
+        await writeFile(continuePath, "continue", "utf8");
+        await waitForPath(firstAcquiredPath);
+        await expect(stat(secondAcquiredPath)).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+
+        await writeFile(releaseFirstPath, "release", "utf8");
+        await first;
+  await launch(secondAcquiredPath, releaseSecondPath, false);
+        await waitForPath(secondAcquiredPath);
+        await expect(stat(lockPath)).rejects.toMatchObject({ code: "ENOENT" });
+      } finally {
+        await Promise.all([
+          writeFile(continuePath, "continue", "utf8"),
+          writeFile(releaseFirstPath, "release", "utf8"),
+          writeFile(releaseSecondPath, "release", "utf8"),
+        ]);
+        await Promise.allSettled(contenders);
+      }
     },
     SUITE_TEST_TIMEOUT_MS,
   );
