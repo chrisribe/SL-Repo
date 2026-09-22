@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "eventType": "usage",
+  "eventId": "SL-USE-3B4C7BEE869C964BD5FBBF173410E939",
+  "idempotencyKey": "sha256:3b4c7bee869c964bd5fbbf173410e939661e6db293d1f278eb5f02fc28ab3e95",
+  "artifactId": "SL-20260922-SERIALIZE-STALE-LOCK-TAKEOVER-WITH-AN-OS-MUTEX",
+  "artifactVersion": "sha256:50b74efb527c71a876301a1f87ef33622572a6dead82313d513b649c3d69ef02",
+  "artifactContentHash": "50b74efb527c71a876301a1f87ef33622572a6dead82313d513b649c3d69ef02",
+  "taskRunId": "sl-mutex-plumbing-regression-20260922",
+  "applicationId": "sl-mutex-plumbing-regression-20260922",
+  "stage": "verified",
+  "outcome": "success",
+  "verifierType": "test-suite",
+  "timestamp": "2026-09-22T13:36:48.150Z",
+  "evidenceRef": "test:SL-powershell-runtime-lifecycle-mutation-lock",
+  "scope": {
+    "id": "SL-SCOPE-ROOT",
+    "path": "."
+  }
+}

@@ -23,7 +23,9 @@
       "scope": {
         "id": "SL-SCOPE-ROOT",
         "path": "."
-      }
+      },
+      "lastRetrievedAt": "2026-09-08T14:10:00Z",
+      "lastSuccessfulUseAt": "2026-09-08T14:11:00Z"
     },
     {
       "id": "SL-20260907-GENERATE-EMBEDDED-POWERSHELL-ARTIFACTS-WITHOUT-SEM",
@@ -40,6 +42,25 @@
         "bundle PowerShell runtime",
         "embed JSON in PowerShell",
         "generate scripts containing dollar signs"
+      ],
+      "scope": {
+        "id": "SL-SCOPE-ROOT",
+        "path": "."
+      }
+    },
+    {
+      "id": "SL-20260922-SERIALIZE-STALE-LOCK-TAKEOVER-WITH-AN-OS-MUTEX",
+      "path": ".github/sl-learning/sl-lessons/2026-09/sl-2026-09-22-serialize-stale-lock-takeover-with-an-os-mutex.md",
+      "artifactType": "lesson",
+      "classification": "evidence",
+      "managedBy": "sl",
+      "status": "raw",
+      "createdAt": "2026-09-22T13:07:10.448Z",
+      "lastVerifiedAt": "2026-09-22T13:07:10.448Z",
+      "pinned": false,
+      "relatedTo": [],
+      "trigger": [
+        "stale lock ABA takeover"
       ],
       "scope": {
         "id": "SL-SCOPE-ROOT",

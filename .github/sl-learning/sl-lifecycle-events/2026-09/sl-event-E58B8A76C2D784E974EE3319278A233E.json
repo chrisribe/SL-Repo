@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "timestamp": "2026-09-22T13:07:10.448Z",
+  "artifactId": "SL-20260922-SERIALIZE-STALE-LOCK-TAKEOVER-WITH-AN-OS-MUTEX",
+  "action": "captured",
+  "toStatus": "raw",
+  "toPath": ".github/sl-learning/sl-lessons/2026-09/sl-2026-09-22-serialize-stale-lock-takeover-with-an-os-mutex.md",
+  "eventId": "SL-EVENT-E58B8A76C2D784E974EE3319278A233E",
+  "idempotencyKey": "sha256:e58b8a76c2d784e974ee3319278a233e6ae1cb0f3139dbb9ad5247b5e082b7ac"
+}

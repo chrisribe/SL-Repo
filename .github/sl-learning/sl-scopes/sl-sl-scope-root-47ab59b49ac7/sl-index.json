@@ -27,6 +27,16 @@
         "generate scripts containing dollar signs"
       ],
       "relatedTo": []
+    },
+    {
+      "id": "SL-20260922-SERIALIZE-STALE-LOCK-TAKEOVER-WITH-AN-OS-MUTEX",
+      "path": ".github/sl-learning/sl-lessons/2026-09/sl-2026-09-22-serialize-stale-lock-takeover-with-an-os-mutex.md",
+      "artifactType": "lesson",
+      "status": "raw",
+      "trigger": [
+        "stale lock ABA takeover"
+      ],
+      "relatedTo": []
     }
   ]
 }
